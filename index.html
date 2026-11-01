@@ -400,6 +400,7 @@ exitonclick()
   story:'На соревнованиях по черепашьим бегам черепаха Сириус проползает всегда в два раза большее расстояние, чем черепаха Андромеда. Узнай у пользователя, сколько пикселей преодолела Андромеда, и нарисуй путь Сириуса!',
   reqs:['Запроси число пикселей с помощью функции `input()`', 'Переведи ввод в число `int()`', 'Умножь его на 2 и используй `forward()` для Сириуса'],
   hints:['Напиши: `a = int(input("Сколько проползла Андромеда? "))`', 'Затем заставь черепашку проползти вперед на расстояние `a * 2`.'],
+  testInputs: ['50'],
   starter:`from turtle import *
 
 # Запроси у пользователя расстояние Андромеды:
@@ -417,6 +418,7 @@ exitonclick()
   story:'Мы очень любим играть, но для каждой игры нужно поле своего размера. Напиши программу, которая нарисует прямоугольное поле по введенным пользователем данным об его длине и ширине.',
   reqs:['Запроси длину и ширину поля через `input()`', 'Нарисуй прямоугольник со сторонами равными введенным длине и ширине'],
   hints:['Заведи две переменные: `width = int(input("Ширина: "))` и `height = int(input("Высота: "))`', 'Чтобы нарисовать прямоугольник, иди вперед на width, поверни на 90, иди на height, поверни на 90 и повтори.'],
+  testInputs: ['100', '50'],
   starter:`from turtle import *
 
 # Запроси у пользователя длину и ширину:
@@ -435,6 +437,7 @@ exitonclick()
   story:'Какой классный корабль мы можем создавать, но он всегда одинаковый! Добавь в программу запрос цвета паруса от пользователя.',
   reqs:['Спроси у пользователя цвет паруса через `input()` (без `int()`, так как цвет - это текст!)', 'Используй команду `color(c)` (где `c` - твоя переменная) перед рисованием паруса'],
   hints:['Напиши: `c = input("Введите цвет по-английски (например, red): ")`', 'Затем используй `color(c)` перед тем как черепашка начнет рисовать треугольный парус.'],
+  testInputs: ['red'],
   starter:`from turtle import *
 
 # Запроси цвет паруса (без int!):
@@ -548,6 +551,7 @@ penup()
   story:'В цифровое царство приезжают в гости великаны и лилипуты. Местные жители просят написать программу, которая создавала бы для гостей лестницы разных размеров в соответствии с введенными параметрами ширины и высоты ступенек.',
   reqs:['Спроси пользователя о ширине и высоте ступеньки', 'Нарисуй лестницу из 3 ступенек, используя введенные значения'],
   hints:['Запиши: `w = int(input("Ширина: "))` и `h = int(input("Высота: "))`.', 'Рисуй лестницу с помощью цикла `for i in range(3):`, внутри: `forward(w)`, `left(90)`, `forward(h)`, `right(90)`.'],
+  testInputs: ['30', '10'],
   starter:`from turtle import *
 
 # Узнай параметры у пользователя:
@@ -844,22 +848,30 @@ function skRead(x){
   if (Sk.builtinFiles === undefined || Sk.builtinFiles.files[x] === undefined) throw "File not found: '" + x + "'";
   return Sk.builtinFiles.files[x];
 }
+
 let runChain = Promise.resolve();
-function runPy(code){
-  const p = runChain.then(() => runPyNow(code));
+
+function runPy(code, testInputs = [], isCheck = false){
+  const p = runChain.then(() => runPyNow(code, testInputs, isCheck));
   runChain = p.catch(() => {});
   return p;
 }
-async function runPyNow(code){
+
+async function runPyNow(code, testInputs, isCheck){
   Engine.reset();
   let out = '';
   if (!PY_OK) return {...Engine.result(), output:'', error:{custom:true, title:'Python не загрузился', text:'Для работы тренажёра нужен интернет: Python подключается из сети. Проверь подключение и обнови страницу.'}};
-  // Перехватываем input, чтобы он работал корректно в браузере (возвращаем тестовое значение при проверке)
+  
+  if (!window.prompt_native) {
+      window.prompt_native = window.prompt; 
+  }
+  
   window.prompt = function(message) { 
-      return prompt_native(message) || '50'; // '50' по умолчанию для тестов
+      if (isCheck && testInputs && testInputs.length > 0) {
+          return testInputs.shift(); 
+      }
+      return window.prompt_native(message) || '50';
   };
-  const prompt_native = window.prompt_native || window.prompt;
-  window.prompt_native = prompt_native;
   
   Sk.configure({output: s => { out += s; }, read: skRead, __future__: Sk.python3, execLimit: 6000, yieldLimit: 100});
   try {
@@ -993,7 +1005,6 @@ const H = {
       if (bad) return H.fail(`Толщина линии должна быть ${o.width}, а у тебя ${bad.width}. Напиши <code>pensize(${o.width})</code> до рисования.`);
     }
     if (o.shape && ref && !H.match(H.lines(ref), L, o.shape)) return H.fail(o.shapeMsg);
-    // Для более простых проверок с input exitonclick может не срабатывать идеально, не будем требовать жестко
     return H.ok();
   }
 };
@@ -1264,7 +1275,11 @@ async function doRun(isCheck){
   const my = ++runToken, ti = state.cur, code = ta.value;
   state.code[ti] = code; save();
   con.innerHTML = ''; conAdd(`<div class="c-line c-info">⏳ Черепашка читает программу…</div>`);
-  const res = await runPy(code);
+  
+  const t = TASKS[ti];
+  const autoInputs = t.testInputs ? t.testInputs.slice() : [];
+  
+  const res = await runPy(code, autoInputs, isCheck);
   busy = false; $('#runBtn').disabled = $('#checkBtn').disabled = false;
   if (my !== runToken) return;
   con.innerHTML = '';
